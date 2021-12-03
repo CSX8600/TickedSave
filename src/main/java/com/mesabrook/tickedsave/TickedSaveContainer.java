@@ -25,7 +25,7 @@ public class TickedSaveContainer extends DummyModContainer {
 		super(new ModMetadata());
 		ModMetadata meta = getMetadata();
 		meta.modId = "tickedsave";
-		meta.version = "0.0.1";
+		meta.version = "0.0.2";
 		meta.name = "Ticked Save";
 	}
 	

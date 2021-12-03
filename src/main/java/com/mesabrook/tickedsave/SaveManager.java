@@ -3,21 +3,22 @@ package com.mesabrook.tickedsave;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.stream.Collectors;
 
 import net.minecraft.block.BlockDirt;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.server.management.PlayerChunkMap;
 import net.minecraft.util.text.TextComponentString;
-import net.minecraft.util.text.TextComponentTranslation;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.ChunkProviderServer;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.world.WorldEvent;
-import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.server.FMLServerHandler;
 
 public class SaveManager {	
@@ -28,6 +29,7 @@ public class SaveManager {
 	private static Method saveChunkDataMethod = null;
 	private static Field playerChunkMapField = null;
 	private boolean isObfuscated = false;
+	private Queue<Long> chunkIDs = new LinkedList<Long>();
 	
 	public static SaveManager instance()
 	{
@@ -168,14 +170,21 @@ public class SaveManager {
 			return true;
 		}
 		
+		private int initialChunkMapSize = 0;
 		private boolean saveChunks()
 		{
 			ChunkProviderServer provider = worldServer.getChunkProvider();
 			int effectiveIterations = Config.chunksPerTick;
-			int chunkMapSize = provider.id2ChunkMap.size();
-			if (currentChunk + effectiveIterations >= chunkMapSize)
+			if (chunkIDs.size() <= 0)
 			{
-				effectiveIterations = chunkMapSize - currentChunk;
+				chunkIDs = new LinkedList<>(provider.id2ChunkMap.keySet().stream().collect(Collectors.toList()));
+				initialChunkMapSize = chunkIDs.size();
+			}
+			
+			int chunkMapSize = chunkIDs.size();
+			if (effectiveIterations >= chunkMapSize)
+			{
+				effectiveIterations = chunkMapSize;
 			}
 			
 			if (effectiveIterations <= 0)
@@ -183,11 +192,17 @@ public class SaveManager {
 				return true;
 			}
 			
-			List<Chunk> list = provider.id2ChunkMap.values().stream().skip(currentChunk).limit(effectiveIterations).collect(Collectors.toList());
+			//List<Chunk> list = provider.id2ChunkMap.values().stream().skip(currentChunk).limit(effectiveIterations).collect(Collectors.toList());
 			
 			for(int i = 0; i < effectiveIterations; i++)
 			{
-				Chunk chunk = list.get(i);
+				Chunk chunk = provider.id2ChunkMap.get(chunkIDs.poll());
+				
+				if (chunk == null)
+				{
+					currentChunk++;
+					continue;
+				}
 				
 				try 
 				{
@@ -217,11 +232,12 @@ public class SaveManager {
 				currentChunk++;
 			}
 			
-			log("message.verbose.savingchunks", Integer.toString(currentChunk), Integer.toString(chunkMapSize));
+			log("message.verbose.savingchunks", Integer.toString(currentChunk), Integer.toString(initialChunkMapSize));
 			
 			if (effectiveIterations < Config.chunksPerTick)
 			{
 				currentChunk = 0;
+				chunkIDs.clear();
 				return true;
 			}
 			
