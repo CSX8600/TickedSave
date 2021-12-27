@@ -7,7 +7,7 @@ import net.minecraftforge.common.config.Configuration;
 public class Config {
 	private static final String CATEGORY_GENERAL = "general";
 	
-	public static int chunksPerTick = 100;
+	public static int maximumTickTime = 10;
 	public static String broadcast = "false";
 	
 	public static void readConfig()
@@ -34,7 +34,7 @@ public class Config {
 	
 	private static void initGeneralConfig(Configuration cfg)
 	{
-		chunksPerTick = cfg.getInt("chunksPerTick", CATEGORY_GENERAL, chunksPerTick, 1, Integer.MAX_VALUE, "How many chunks per tick (per world) should we save?");
+		maximumTickTime = cfg.getInt("maximumTickTime", CATEGORY_GENERAL, maximumTickTime, 1, Integer.MAX_VALUE, "What is the maximum amount of time any operation should take?");
 		broadcast = cfg.getString("broadcast", CATEGORY_GENERAL, broadcast, "Should we broadcast save messages?");
 	}
 }

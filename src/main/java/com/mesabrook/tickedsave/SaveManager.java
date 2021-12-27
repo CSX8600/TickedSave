@@ -3,12 +3,14 @@ package com.mesabrook.tickedsave;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import com.google.common.base.Stopwatch;
 
 import net.minecraft.block.BlockDirt;
 import net.minecraft.entity.player.EntityPlayer;
@@ -30,6 +32,7 @@ public class SaveManager {
 	private static Field playerChunkMapField = null;
 	private boolean isObfuscated = false;
 	private Queue<Long> chunkIDs = new LinkedList<Long>();
+	private Queue<Chunk> loadedChunks = new LinkedList<Chunk>();
 	
 	public static SaveManager instance()
 	{
@@ -170,33 +173,27 @@ public class SaveManager {
 			return true;
 		}
 		
-		private int initialChunkMapSize = 0;
+		private int initialMapSize = 0;
 		private boolean saveChunks()
 		{
 			ChunkProviderServer provider = worldServer.getChunkProvider();
-			int effectiveIterations = Config.chunksPerTick;
+			Stopwatch stopwatch = Stopwatch.createStarted();
 			if (chunkIDs.size() <= 0)
 			{
 				chunkIDs = new LinkedList<>(provider.id2ChunkMap.keySet().stream().collect(Collectors.toList()));
-				initialChunkMapSize = chunkIDs.size();
+				initialMapSize = chunkIDs.size();
 			}
 			
-			int chunkMapSize = chunkIDs.size();
-			if (effectiveIterations >= chunkMapSize)
+			while(stopwatch.elapsed(TimeUnit.MILLISECONDS) < Config.maximumTickTime)
 			{
-				effectiveIterations = chunkMapSize;
-			}
-			
-			if (effectiveIterations <= 0)
-			{
-				return true;
-			}
-			
-			//List<Chunk> list = provider.id2ChunkMap.values().stream().skip(currentChunk).limit(effectiveIterations).collect(Collectors.toList());
-			
-			for(int i = 0; i < effectiveIterations; i++)
-			{
-				Chunk chunk = provider.id2ChunkMap.get(chunkIDs.poll());
+				Long chunkID = chunkIDs.poll();
+				if (chunkID == null)
+				{
+					currentChunk = 0;
+					return true;
+				}
+				
+				Chunk chunk = provider.id2ChunkMap.get(chunkID.longValue());
 				
 				if (chunk == null)
 				{
@@ -231,15 +228,9 @@ public class SaveManager {
 				
 				currentChunk++;
 			}
+			stopwatch.stop();
 			
-			log("message.verbose.savingchunks", Integer.toString(currentChunk), Integer.toString(initialChunkMapSize));
-			
-			if (effectiveIterations < Config.chunksPerTick)
-			{
-				currentChunk = 0;
-				chunkIDs.clear();
-				return true;
-			}
+			log("message.verbose.savingchunks", Integer.toString(currentChunk), Integer.toString(initialMapSize));
 			
 			return false;
 		}
@@ -255,20 +246,7 @@ public class SaveManager {
 		{
 			ChunkProviderServer provider = worldServer.getChunkProvider();
 			
-			int numberLoadedChunks = provider.getLoadedChunkCount();
-			int effectiveIterations = Config.chunksPerTick;
-			
-			if (currentChunk + effectiveIterations >= numberLoadedChunks)
-			{
-				effectiveIterations = numberLoadedChunks - currentChunk;
-			}
-			
-			if (effectiveIterations <= 0)
-			{
-				return true;
-			}
-			
-			List<Chunk> chunks = provider.getLoadedChunks().stream().skip(currentChunk).limit(effectiveIterations).collect(Collectors.toList());
+			Collection<Chunk> chunks = provider.getLoadedChunks();
 			PlayerChunkMap playerChunkMap;
 			try
 			{
@@ -281,23 +259,35 @@ public class SaveManager {
 				return false;
 			}
 			
-			for(int i = 0; i < effectiveIterations; i++)
+			Stopwatch stopwatch = Stopwatch.createStarted();
+			if (loadedChunks.size() <= 0)
 			{
-				Chunk chunk = chunks.get(i);
-				if (!playerChunkMap.contains(chunk.x, chunk.z))
+				loadedChunks = new LinkedList<>(provider.getLoadedChunks());
+			}
+			
+			while(stopwatch.elapsed(TimeUnit.MILLISECONDS) <= Config.maximumTickTime)
+			{
+				Chunk nextChunk = loadedChunks.poll();
+				if (nextChunk == null)
 				{
-					provider.queueUnload(chunk);
+					currentChunk = 0;
+					return true;
+				}
+				
+				if (!provider.getLoadedChunks().contains(nextChunk))
+				{
+					continue;
+				}
+				
+				if (!playerChunkMap.contains(nextChunk.x, nextChunk.z))
+				{
+					provider.queueUnload(nextChunk);
 				}
 				
 				currentChunk++;
 			}
-			
-			log("message.verbose.unload", Integer.toString(currentChunk), Integer.toString(numberLoadedChunks));
-			
-			if (effectiveIterations < Config.chunksPerTick)
-			{
-				return true;
-			}
+			stopwatch.stop();
+			log("message.verbose.unload", Integer.toString(currentChunk), Integer.toString(loadedChunks.size()));
 			
 			return false;
 		}
