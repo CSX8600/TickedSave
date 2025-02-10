@@ -32,7 +32,7 @@ public class SaveManager {
 	private static Field playerChunkMapField = null;
 	private boolean isObfuscated = false;
 	private Queue<Long> chunkIDs = new LinkedList<Long>();
-	private Queue<Chunk> loadedChunks = new LinkedList<Chunk>();
+	private Queue<Long> loadedChunks = new LinkedList<Long>();
 	
 	public static SaveManager instance()
 	{
@@ -246,7 +246,6 @@ public class SaveManager {
 		{
 			ChunkProviderServer provider = worldServer.getChunkProvider();
 			
-			Collection<Chunk> chunks = provider.getLoadedChunks();
 			PlayerChunkMap playerChunkMap;
 			try
 			{
@@ -262,20 +261,23 @@ public class SaveManager {
 			Stopwatch stopwatch = Stopwatch.createStarted();
 			if (loadedChunks.size() <= 0)
 			{
-				loadedChunks = new LinkedList<>(provider.getLoadedChunks());
+				loadedChunks = new LinkedList<>(provider.id2ChunkMap.keySet().stream().collect(Collectors.toList()));
 			}
 			
 			while(stopwatch.elapsed(TimeUnit.MILLISECONDS) <= Config.maximumTickTime)
 			{
-				Chunk nextChunk = loadedChunks.poll();
-				if (nextChunk == null)
+				Long chunkID = loadedChunks.poll();
+				if (chunkID == null)
 				{
 					currentChunk = 0;
 					return true;
 				}
 				
-				if (!provider.getLoadedChunks().contains(nextChunk))
+				Chunk nextChunk = provider.id2ChunkMap.get(chunkID.longValue());
+				
+				if (nextChunk == null)
 				{
+					currentChunk++;
 					continue;
 				}
 				
